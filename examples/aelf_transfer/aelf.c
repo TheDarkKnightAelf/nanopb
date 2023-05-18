@@ -2,41 +2,8 @@
 #include <pb_encode.h>
 #include <pb_decode.h>
 #include "aelf.pb.h"
-#include "libbase58.h"
 
 #define BUFFER_SIZE 256
-
-typedef struct _BufferHolder
-{
-    pb_byte_t *buffer;
-    /* The amount to to transfer. */
-    size_t size;
-} BufferHolder;
-
-void binaryToHex(char* binary, char* hex, int len) {
-    char* hexMap = "0123456789ABCDEF";
-    int i = 0;
-
-    // Process every 4 bits
-    while(i < len) {
-        // Get the binary digit by subtracting '0'
-        int byte = binary[i] - '0';
-
-        // Bitwise shift to the left by three places
-        byte = byte << 3;
-
-        // Take the next three bits and bitwise or them with the first bit
-        byte = byte | ((binary[i + 1] - '0') << 2);
-        byte = byte | ((binary[i + 2] - '0') << 1);
-        byte = byte | (binary[i + 3] - '0');
-
-        // Get the hex representation from the map
-        hex[i / 4] = hexMap[byte];
-        
-        i += 4;
-    }
-    hex[len / 4] = '\0';
-}
 
 void tohex(unsigned char * in, size_t insz, char * out, size_t outsz)
 {
@@ -55,33 +22,23 @@ void tohex(unsigned char * in, size_t insz, char * out, size_t outsz)
     }
     pout[-1] = 0;
 }
-// typedef struct _TransferInfo
-// {
-//     char *to;
-//     char *symbol;
-//     /* The amount to to transfer. */
-//     int64_t amount;
-//     /* The memo. */
-//     char *memo;
-// } TransferInfo;
 
 bool read_address_field(pb_istream_t *stream, const pb_field_iter_t *field, void **arg)
 {
-    BufferHolder* bufferHolder = *arg;
+    pb_byte_t* buffer = *arg;
     pb_byte_t binBuffer[BUFFER_SIZE] = {0};
     size_t binToRead = stream->bytes_left;
     bool status = pb_read(stream, binBuffer, binToRead);
     if (!status)
         return status;
-    // binaryToHex((char*) binBuffer, (char*) bufferHolder->buffer, binToRead);
-    tohex(binBuffer, binToRead, (char*) bufferHolder->buffer, 72);
+    tohex(binBuffer, binToRead, (char*) buffer, 2*binToRead);
     return true;
 }
 
 bool read_string_field(pb_istream_t *stream, const pb_field_iter_t *field, void **arg)
 {
-    BufferHolder* bufferHolder = *arg;
-    return pb_read(stream, bufferHolder->buffer, stream->bytes_left);
+    pb_byte_t* buffer = *arg;
+    return pb_read(stream, buffer, stream->bytes_left);
 }
 
 bool read_transfer_input(pb_istream_t *stream, const pb_field_iter_t *field, void **arg)
@@ -124,56 +81,25 @@ int main()
     aelf_TransferInput transfer_input = aelf_TransferInput_init_zero;
 
     pb_byte_t symbolBuffer[BUFFER_SIZE] = {0};
-    size_t symbolBufferSize = sizeof(symbolBuffer);
     pb_byte_t memoBuffer[BUFFER_SIZE] = {0};
-    size_t memoBufferSize = sizeof(memoBuffer);
     pb_byte_t addressBuffer[BUFFER_SIZE] = {0};
-    size_t addressBufferSize = sizeof(addressBuffer);
 
     transfer_input.symbol.funcs.decode = read_string_field;
     transfer_input.memo.funcs.decode = read_string_field;
     transfer_input.to.value.funcs.decode = read_address_field;
-    BufferHolder symbolArg;
-    symbolArg.buffer = symbolBuffer;
-    symbolArg.size = symbolBufferSize;
-    transfer_input.symbol.arg = &symbolArg;
-    BufferHolder memoArg;
-    memoArg.buffer = memoBuffer;
-    memoArg.size = memoBufferSize;
-    transfer_input.memo.arg = &memoArg;
+    transfer_input.symbol.arg = &symbolBuffer;
+    transfer_input.memo.arg = &memoBuffer;
+    transfer_input.to.value.arg = &addressBuffer;
 
-    BufferHolder addressArg;
-    addressArg.buffer = addressBuffer;
-    addressArg.size = addressBufferSize;
-    transfer_input.to.value.arg = &addressArg;
-
-    // pb_byte_t toAddress[BUFFER_SIZE];
-
-    // TransferInfo info;
-    // info.to = toAddress;
-    // info.symbol = symbolBuffer;
-    // info.memo = memoBuffer;
-
-    // void* arg[] = {
-    //     &transfer_input
-    // };
-
-    /* Allocate space for the decoded message. */
     aelf_Transaction txn = aelf_Transaction_init_zero;
 
     txn.params.funcs.decode = read_transfer_input;
     txn.params.arg = &transfer_input;
-    /* Create a stream that reads from the buffer. */
+
     pb_istream_t stream = pb_istream_from_buffer((const pb_byte_t *)txn_data, sizeof(txn_data));
 
-    // printf("transfer location is %p\n", &transfer_input);
-
-    // printf("arg0 location is %p\n", arg[0]);
-
-    /* Now we are ready to decode the message. */
     bool status;
     status = pb_decode(&stream, aelf_Transaction_fields, &txn);
-    /* Check for errors... */
     if (!status)
     {
         printf("Decoding failed: %s\n", PB_GET_ERROR(&stream));

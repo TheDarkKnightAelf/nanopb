@@ -5,20 +5,12 @@
 
 #define BUFFER_SIZE 256
 
-void tohex(unsigned char * in, size_t insz, char * out, size_t outsz)
-{
-    unsigned char * pin = in;
-    const char * hex = "0123456789ABCDEF";
-    char * pout = out;
-    for(; pin < in+insz; pout +=2, pin++){
-        pout[0] = hex[(*pin>>4) & 0xF];
-        pout[1] = hex[ *pin     & 0xF];
-        if (pout + 2 - out > outsz){
-            /* Better to truncate output string than overflow buffer */
-            /* it would be still better to either return a status */
-            /* or ensure the target buffer is large enough and it never happen */
-            break;
-        }
+void tohex(const unsigned char *in, size_t insz, char *out, size_t outsz) {
+    const char *hex = "0123456789abcdef";
+    char *pout = out;
+    for (size_t i = 0; i < insz && (i * 2 + 1) < outsz; i++) {
+        pout[i * 2] = hex[(in[i] >> 4) & 0xF];
+        pout[i * 2 + 1] = hex[in[i] & 0xF];
     }
     pout[-1] = 0;
 }
@@ -78,6 +70,17 @@ int main()
         0xd3, 0x1d, 0x19, 0xfc, 0xe0, 0xb1, 0xea, 0xaf,
         0x3c, 0xf3, 0xa1, 0x4e, 0x60, 0xdf, 0x7d, 0x01};
 
+
+/*
+
+The bytes after the first occurrence of 0x0a, 0x22, 0x0a, 0x20 are for the address.
+The bytes after the second occurrence of 0x0a, 0x22, 0x0a, 0x20 are for the symbol.
+The bytes after the third occurrence of 0x0a, 0x22, 0x0a, 0x20 are for the amount (part of TransferInput).
+The bytes after the fourth occurrence of 0x0a, 0x22, 0x0a, 0x20 are for the memo.
+
+ */
+
+
     aelf_TransferInput transfer_input = aelf_TransferInput_init_zero;
 
     pb_byte_t symbolBuffer[BUFFER_SIZE] = {0};
@@ -110,6 +113,5 @@ int main()
     printf("Symbol    : %s\n", symbolBuffer);
     printf("Amount    : %llu\n", transfer_input.amount);
     printf("Memo      : %s\n", memoBuffer);
-
     return 0;
 }
